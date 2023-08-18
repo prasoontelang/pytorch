@@ -393,7 +393,7 @@ def _sfdp_init():
             _sfdp_params_check,
         ),
     ]:
-        args = [*args, *workaround.values()]# type: ignore[attr-defined]
+        args = [*args, *workaround.values()]  # type: ignore[attr-defined]
         register_replacement(
             pattern,
             replacement,
