@@ -259,6 +259,27 @@ def _sfdp_replacement_10(query, key, value):
     )
 
 
+def _sfdp_pattern_11(query, key, value, inv_scale):
+    # Mainly for huggingface models
+    q = query.permute(0, 2, 1, 3)
+    k = key.permute(0, 2, 1, 3)
+    v = value.permute(0, 2, 1, 3)
+    return torch.matmul(q, k.transpose(-2, -1)).div(inv_scale).softmax(dim=-1).matmul(v)
+
+
+def _sfdp_replacement_11(query, key, value, inv_scale):
+    counters["inductor"]["fuse_attention"] += 1
+    return aten.scaled_dot_product_attention(
+        query.transpose(1, 2),
+        key.transpose(1, 2),
+        value.transpose(1, 2),
+        attn_mask=None,
+        dropout_p=0.0,
+        is_causal=False,
+        scale=1.0 / inv_scale,
+    )
+
+
 def _sfdp_params_check(match):
     assert all(k in match.kwargs for k in ("query", "key", "value"))
     query = match.kwargs["query"].meta["val"]
@@ -391,6 +412,13 @@ def _sfdp_init():
             [gp(), gp(), gp()],
             {},
             _sfdp_params_check,
+        ),
+        (
+            _sfdp_pattern_11,
+            _sfdp_replacement_11,
+            [g(), g(), g(), c()],
+            {},
+            _sfdp_scale_factor_check(aten.div.Tensor),
         ),
     ]:
         args = [*args, *workaround.values()]

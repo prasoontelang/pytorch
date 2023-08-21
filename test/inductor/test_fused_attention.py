@@ -1,6 +1,7 @@
 # Owner(s): ["module: inductor"]
 import itertools
 import math
+import unittest
 
 import torch
 import torch._inductor.config
@@ -38,9 +39,9 @@ class TestSDPAPatternRewriter(TestCase):
         if args1 is None:
             tensor_shape = (4, 2, 16, 32)
             args1 = [
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
             ]
         args2 = self._clone_inputs(args1)
 
@@ -114,9 +115,9 @@ class TestSDPAPatternRewriter(TestCase):
 
         tensor_shape = (2, 4, 8, 16)
         args = [
-            torch.randn(tensor_shape, device="cuda"),
-            torch.randn(tensor_shape, device="cuda"),
-            torch.randn(tensor_shape, device="cuda"),
+            torch.randn(tensor_shape),
+            torch.randn(tensor_shape),
+            torch.randn(tensor_shape),
         ]
         _, (source_code,) = run_and_get_code(dot_prod_attention, *args)
         self.assertNotIn("aten._scaled_dot_product_efficient_attention", source_code)
@@ -135,6 +136,9 @@ class TestSDPAPatternRewriter(TestCase):
 
         self._check_common(dot_prod_attention)
 
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_3(self):
         def dot_prod_attention(
             query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
@@ -148,6 +152,9 @@ class TestSDPAPatternRewriter(TestCase):
 
         self._check_common(dot_prod_attention, contains=False, has_dropout=True)
 
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_4(self):
         def dot_prod_attention(
             query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
@@ -190,6 +197,9 @@ class TestSDPAPatternRewriter(TestCase):
         self._check_common(sfdp_pattern_5_v2, contains=False)
 
     @skipIfRocm
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_6(self):
         def sfdp_pattern_6(query, key, value):
             attn_mask = torch.ones(
@@ -208,6 +218,9 @@ class TestSDPAPatternRewriter(TestCase):
         self._check_common(sfdp_pattern_6, contains=False, has_dropout=True)
 
     @skipIfRocm
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_7(self):
         def sfdp_pattern_7(query, key, value):
             q = query.permute(0, 2, 1, 3)
@@ -230,6 +243,9 @@ class TestSDPAPatternRewriter(TestCase):
         self._check_common(sfdp_pattern_7, args, contains=SM80OrLater, atol=2e-3)
 
     @skipIfRocm
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_8(self):
         def sfdp_pattern_8(query, key, value):
             q = query.permute(0, 2, 1, 3)
@@ -250,6 +266,9 @@ class TestSDPAPatternRewriter(TestCase):
         self._check_common(sfdp_pattern_8, args, atol=2e-3)
 
     @skipIfRocm
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_9(self):
         def sfdp_pattern_9(query, key, value):
             q = query.permute(0, 2, 1, 3)
@@ -273,6 +292,9 @@ class TestSDPAPatternRewriter(TestCase):
         self._check_common(sfdp_pattern_9, args, contains=SM80OrLater, atol=2e-3)
 
     @skipIfRocm
+    @unittest.skipIf(
+        not HAS_CUDA or PLATFORM_SUPPORTS_FUSED_SDPA, "CUDA and FUSED_SDPA needed"
+    )
     def test_sdpa_rewriter_10(self):
         def sfdp_pattern_10(query, key, value):
             q = query.permute(0, 2, 1, 3)
@@ -311,10 +333,10 @@ class TestSDPAPatternRewriter(TestCase):
         tensor_shape = (2, 4, 4, 4)
         for is_inv_factor in [True, False]:
             args = [
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn((4, 1, 1), device="cuda"),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
+                torch.randn((4, 1, 1)),
             ]
             model = Model(is_inv_factor).eval()
             # The training path has an accuracy gap compared with eager mode.
@@ -341,14 +363,14 @@ class TestSDPAPatternRewriter(TestCase):
         tensor_shape = (2, 4, 4, 4)
 
         upsupported_masks = [
-            torch.randn((2, 4, 4, 4), device="cuda").to(dtype=torch.int),
+            torch.randn((2, 4, 4, 4)).to(dtype=torch.int),
             2.0,
         ]
         for atte_mask in upsupported_masks:
             args = [
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
-                torch.randn(tensor_shape, device="cuda"),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
+                torch.randn(tensor_shape),
                 atte_mask,
             ]
             model = Model().eval()
@@ -357,7 +379,25 @@ class TestSDPAPatternRewriter(TestCase):
                 model, args1=args, contains=False, atol=1e-4, has_fuse_pattern=False
             )
 
+    @skipIfRocm
+    def test_sdpa_rewriter_11(self):
+        def dot_prod_attention(
+            query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
+        ) -> torch.Tensor:
+            """Input tensors assumed to have shape (batch_size, seq_len, n_head, embed_dim)"""
+            q = query.transpose(1, 2)
+            k = key.transpose(1, 2)
+            v = value.transpose(1, 2)
+            return (
+                torch.matmul(q, k.transpose(-2, -1))
+                .div(math.sqrt(key.shape[-1]))
+                .softmax(dim=-1)
+                .matmul(v)
+            )
+
+        self._check_common(dot_prod_attention)
+
 
 if __name__ == "__main__":
-    if IS_LINUX and HAS_CUDA and PLATFORM_SUPPORTS_FUSED_SDPA:
+    if IS_LINUX:
         run_tests()
