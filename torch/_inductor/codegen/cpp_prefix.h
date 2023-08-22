@@ -248,6 +248,38 @@ inline float flag_to_float_scalar(T src) {
 
 #if defined(CPU_CAPABILITY_AVX512) || defined(CPU_CAPABILITY_AVX2)
 
+
+inline at::vec::Vectorized<float> masked_load(const float* src, at::vec::Vectorized<float> mask) {
+  at::vec::Vectorized<float> zero_vec(0);
+# if defined(CPU_CAPABILITY_AVX512)
+    auto all_ones = _mm512_set1_epi32(0xFFFFFFFF);
+    auto mmask = _mm512_cmp_epi32_mask(_mm512_castps_si512(mask), all_ones, _MM_CMPINT_EQ);
+    return _mm512_mask_loadu_ps(zero_vec, mmask, src);
+# else // AVX2
+    auto all_ones = _mm256_set1_epi32(0xFFFFFFFF);
+    auto mmask = _mm256_cmp_epi32_mask(_mm256_castps_si256(mask), all_ones, _MM_CMPINT_EQ);
+    return _mm256_mask_loadu_ps(zero_vec, mmask, src);
+# endif
+}
+
+template <typename T>
+inline at::vec::Vectorized<T> masked_load(const T* src, at::vec::Vectorized<float> mask) {
+# if defined(CPU_CAPABILITY_AVX512)
+  auto all_ones = _mm512_set1_epi32(0xFFFFFFFF);
+  auto mmask = _mm512_cmp_epi32_mask(_mm512_castps_si512(mask), all_ones, _MM_CMPINT_EQ);
+  auto zero = _mm256_set1_epi16(0);
+  auto temp = _mm256_mask_loadu_epi16(zero, mmask, src);
+  return _mm512_inserti32x8(_mm512_castsi256_si512(temp), zero, 1);
+# else // AVX2
+  auto all_ones = _mm256_set1_epi32(0xFFFFFFFF);
+  auto mmask = _mm256_cmp_epi32_mask(_mm256_castps_si256(mask), all_ones, _MM_CMPINT_EQ);
+  auto zero = _mm_set1_epi16(0);
+  auto temp = _mm_mask_loadu_epi16(zero, mmask, src);
+  return _mm256_inserti128_si256(_mm256_castsi128_si256(temp), zero, 1);
+# endif
+}
+
+
 template <typename T>
 inline at::vec::Vectorized<float> flag_to_float_vec(const T* src) {
   __at_align__ float dst_tmp[at::vec::Vectorized<float>::size()];
